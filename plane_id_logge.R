@@ -1,7 +1,7 @@
 while (1==1) {
   rm(list = ls(all.names = TRUE)) 
-  cmd <- paste0("if ps -p ",Sys.getpid()," > /dev/null; then    echo '",Sys.getpid()," is running'; else     echo 'Restarting process...';  /Library/Frameworks/R.framework/Resources/bin/Rscript '/Users/eab/Projects/adsb/plane_id_logge.R'  > '/Users/eab/Projects/adsb/plane_id_loggeR.log' 2>&1 &")
-  write.table(cmd,"/Users/eab/Projects/adsb/gitignore/inputs/sys_cmd.txt")
+  cmd <- paste("if [ ",Sys.getpid()," -ne 0 ]; then","\n","echo 'Restarting process...'","\n","/Library/Frameworks/R.framework/Resources/bin/Rscript '/Users/eab/Projects/adsb/plane_id_logge.R'  > '/Users/eab/Projects/adsb/plane_id_loggeR.log' 2>&1 &","\n","exit 1","\n","fi")  
+  writeLines(cmd,"/Users/eab/Projects/adsb/gitignore/inputs/sys_cmd.sh")
   suppressWarnings(rm(cmd))
   closeAllConnections()
   rm(list = ls(all.names = TRUE))
