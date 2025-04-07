@@ -1,6 +1,6 @@
 while (1==1) {
   rm(list = ls(all.names = TRUE)) 
-  cmd <- paste0("if ps -p ",Sys.getpid()," > /dev/null; then    echo '",Sys.getpid()," is running'; else     echo 'Restarting process...';  /Library/Frameworks/R.framework/Resources/bin/Rscript '/Users/eab/Projects/adsb/plane_id_logge.R'  > '/Users/eab/Projects/adsb/plane_id_logge.log' 2>&1 &")
+  cmd <- paste0("if ps -p ",Sys.getpid()," > /dev/null; then    echo '",Sys.getpid()," is running'; else     echo 'Restarting process...';  /Library/Frameworks/R.framework/Resources/bin/Rscript '/Users/eab/Projects/adsb/plane_id_logge.R'  > '/Users/eab/Projects/adsb/plane_id_loggeR.log' 2>&1 &")
   write.table(cmd,"/Users/eab/Projects/adsb/gitignore/inputs/sys_cmd.txt")
   suppressWarnings(rm(cmd))
   closeAllConnections()
@@ -55,6 +55,7 @@ while (1==1) {
   ac_pull <- ac_pull$aircraft
   mylist <- ac_pull
   e <- length(ac_pull)
+  
   ##########
   {
     if (e == 0) {
@@ -62,16 +63,18 @@ while (1==1) {
       next
     }
     else if (e >= 1) {
-      my_list <- data.frame("hex" = NA,"flight" = NA,"alt_baro" = NA,"gs" = NA,"nav_heading" = NA,"version" = NA,"messages" = NA,"seen" = NA,"squawk" = NA,"emergency" = NA)
+      my_list <- data.frame("hex" = NA,"flight" = NA,"alt_baro" = NA,"baro_rate" = NA,"gs" = NA,"nav_heading" = NA,"version" = NA,"messages" = NA,"seen" = NA,"category" = NA,"lon" = NA,"lat" = NA,"squawk" = NA,"emergency" = NA)
       my_list_f <- bind_rows(mylist,my_list)
-      final_planes <- subset(my_list_f,select = c(hex,flight,alt_baro,gs,nav_heading,version,messages,seen,squawk,emergency))
+      final_planes <- subset(my_list_f,select = c(hex,flight,alt_baro,baro_rate,gs,nav_heading,version,messages,seen,category,lon,lat,squawk,emergency))
       final_planes_f <- final_planes[!is.na(final_planes$hex),]
       final_planes$FirstSeen <- Sys.time()
       planes <- final_planes[!duplicated(final_planes$hex),]
+      
       ##
       existing_planes <- inner_join(planes,planes_db,by="hex")
       existing_planes <- existing_planes[!is.na(existing_planes$hex),]
       missing_planes <- anti_join(planes_db,planes,by="hex")
+      
       {
         if (nrow(existing_planes)>0) {
           existing_planes$SeenTimes.x <- existing_planes$SeenTimes
@@ -85,9 +88,15 @@ while (1==1) {
           existing_planes$seen <- coalesce(existing_planes$seen.x,existing_planes$seen.y)
           existing_planes$squawk <- coalesce(existing_planes$squawk.x,existing_planes$squawk.y)
           existing_planes$emergency <- coalesce(existing_planes$emergency.x,existing_planes$emergency.y)
+          
+          existing_planes$baro_rate <- coalesce(existing_planes$baro_rate.x,existing_planes$baro_rate.y)
+          existing_planes$category <- coalesce(existing_planes$category.x,existing_planes$category.y)
+          existing_planes$lon <- coalesce(existing_planes$lon.x,existing_planes$lon.y)
+          existing_planes$lat <- coalesce(existing_planes$lat.x,existing_planes$lat.y)
+          
           existing_planes$FirstSeen <- existing_planes$FirstSeen.y
           existing_planes$LastSeen <- Sys.time()
-          existing_planes <- subset(existing_planes, select=c(hex,flight,alt_baro,gs,nav_heading,version,messages,seen,squawk,emergency,SeenTimes,FirstSeen,LastSeen))
+          existing_planes <- subset(existing_planes, select=c(hex,flight,alt_baro,baro_rate,gs,nav_heading,version,messages,seen,category,lon,lat,squawk,emergency,SeenTimes,FirstSeen,LastSeen))
           existing_planes$trigger_timestamp <- Sys.time()
           existing_planes_b <- bind_rows(existing_planes,missing_planes)
           rm(existing_planes)
@@ -119,7 +128,7 @@ while (1==1) {
           new_planes$SeenTimes <- 1
           new_planes$FirstSeen <- Sys.time()
           new_planes$LastSeen <- Sys.time()
-          new_planes <- subset(new_planes, select=c(hex,flight,alt_baro,gs,nav_heading,version,messages,seen,squawk,emergency,SeenTimes,FirstSeen,LastSeen))
+          new_planes <- subset(new_planes, select=c(hex,flight,alt_baro,baro_rate,gs,nav_heading,version,messages,seen,category,lon,lat,squawk,emergency,SeenTimes,FirstSeen,LastSeen))
           new_planes$trigger_timestamp <- Sys.time()
           new_planes <- new_planes[!is.na(new_planes$hex),]
           pg <- dbConnect(RPostgres::Postgres()
