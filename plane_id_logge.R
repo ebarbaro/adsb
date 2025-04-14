@@ -1,6 +1,6 @@
 while (1==1) {
   rm(list = ls(all.names = TRUE)) 
-  cmd <- paste("if [ ",Sys.getpid()," -ne 0 ]; then","\n","echo 'Restarting process...'","\n","/Library/Frameworks/R.framework/Resources/bin/Rscript '/Users/eab/Projects/adsb/plane_id_logge.R'  > '/Users/eab/Projects/adsb/plane_id_loggeR.log' 2>&1 &","\n","exit 1","\n","fi")  
+  cmd <- paste("if ! kill -0 ",Sys.getpid()," 2>/dev/null; then","\n","echo 'Restarting process...'","\n","/Library/Frameworks/R.framework/Resources/bin/Rscript '/Users/eab/Projects/adsb/plane_id_logge.R'  > '/Users/eab/Projects/adsb/plane_id_loggeR.log' 2>&1 &","\n","exit 1","\n","fi")  
   writeLines(cmd,"/Users/eab/Projects/adsb/gitignore/inputs/sys_cmd.sh")
   suppressWarnings(rm(cmd))
   closeAllConnections()
@@ -79,7 +79,7 @@ while (1==1) {
         if (nrow(existing_planes)>0) {
           existing_planes$SeenTimes.x <- existing_planes$SeenTimes
           existing_planes$SeenTimes <- ifelse(((existing_planes$messages.x >= existing_planes$messages.y)), existing_planes$SeenTimes, (existing_planes$SeenTimes +1))
-          existing_planes$flight <- coalesce(existing_planes$flight.x,existing_planes$flight.y)
+          existing_planes$flight <- ifelse(!is.na(existing_planes$flight.x),coalesce(existing_planes$flight.x,existing_planes$flight.y),coalesce(existing_planes$flight.y,existing_planes$flight.x))
           existing_planes$alt_baro <- coalesce(existing_planes$alt_baro.x,existing_planes$alt_baro.y)
           existing_planes$gs <- coalesce(existing_planes$gs.x,existing_planes$gs.y)
           existing_planes$nav_heading <- coalesce(existing_planes$nav_heading.x,existing_planes$nav_heading.y)
