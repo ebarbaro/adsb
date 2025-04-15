@@ -1,3 +1,4 @@
+library(geosphere)
 while (1==1) {
   rm(list = ls(all.names = TRUE)) 
   cmd <- paste("if ! kill -0 ",Sys.getpid()," 2>/dev/null; then","\n","echo 'Restarting process...'","\n","/Library/Frameworks/R.framework/Resources/bin/Rscript '/Users/eab/Projects/adsb/plane_id_logge.R'  > '/Users/eab/Projects/adsb/plane_id_loggeR.log' 2>&1 &","\n","exit 1","\n","fi")  
@@ -68,6 +69,12 @@ while (1==1) {
       final_planes <- subset(my_list_f,select = c(hex,flight,alt_baro,baro_rate,gs,nav_heading,version,messages,seen,category,lon,lat,squawk,emergency))
       final_planes_f <- final_planes[!is.na(final_planes$hex),]
       final_planes$FirstSeen <- Sys.time()
+      final_planes <- final_planes %>%
+        mutate(dist_km = distGeo(
+          p1 = cbind(lon, lat),
+          p2 = cbind(Sys.getenv("lon"),Sys.getenv("lat"))) / 1000
+        ) 
+      final_planes$dist_km <- round(final_planes$dist_km, digits = 3)
       planes <- final_planes[!duplicated(final_planes$hex),]
       
       ##
@@ -90,13 +97,20 @@ while (1==1) {
           existing_planes$emergency <- coalesce(existing_planes$emergency.x,existing_planes$emergency.y)
           
           existing_planes$baro_rate <- coalesce(existing_planes$baro_rate.x,existing_planes$baro_rate.y)
-          existing_planes$category <- coalesce(existing_planes$category.x,existing_planes$category.y)
+          existing_planes$category <- ifelse(!is.na(existing_planes$category.x),coalesce(existing_planes$category.x,existing_planes$category.y),coalesce(existing_planes$category.y,existing_planes$category.x))
           existing_planes$lon <- coalesce(existing_planes$lon.x,existing_planes$lon.y)
           existing_planes$lat <- coalesce(existing_planes$lat.x,existing_planes$lat.y)
           
+          existing_planes <- existing_planes %>%
+            mutate(dist_km = distGeo(
+              p1 = cbind(lon, lat),
+              p2 = cbind(Sys.getenv("lon"),Sys.getenv("lat"))) / 1000
+            ) 
+          existing_planes$dist_km <- round(existing_planes$dist_km, digits = 3)
+          
           existing_planes$FirstSeen <- existing_planes$FirstSeen.y
           existing_planes$LastSeen <- Sys.time()
-          existing_planes <- subset(existing_planes, select=c(hex,flight,alt_baro,baro_rate,gs,nav_heading,version,messages,seen,category,lon,lat,squawk,emergency,SeenTimes,FirstSeen,LastSeen))
+          existing_planes <- subset(existing_planes, select=c(hex,flight,alt_baro,baro_rate,nav_heading,gs,dist_km,messages,seen,category,squawk,emergency,lon,lat,version,SeenTimes,FirstSeen,LastSeen))
           existing_planes$trigger_timestamp <- Sys.time()
           existing_planes_b <- bind_rows(existing_planes,missing_planes)
           rm(existing_planes)
@@ -111,24 +125,35 @@ while (1==1) {
           dbWriteTable(pg,"planes",existing_planes, row.names = FALSE, overwrite = TRUE, append = FALSE)
           end_time <- Sys.time()
           log <- data.frame(
-            Source = "planes_tmp",
+            Source = "planes",
             rows_added = nrow(existing_planes),
             StartTime = start_time,
             EndTime = end_time,
             trigger_timestamp = Sys.time())
-          dbWriteTable(pg,"log",log, row.names = FALSE, overwrite = FALSE, append = TRUE)
+          new_planes <- anti_join(planes,existing_planes,by="hex")
+          new_planes <- new_planes[!is.na(new_planes$hex),]
+          if (nrow(new_planes)>0) {
+            dbWriteTable(pg,"log",log, row.names = FALSE, overwrite = FALSE, append = TRUE)
+          }
           dbDisconnect(pg)
           closeAllConnections()
-          suppressWarnings(rm(log))
+          suppressWarnings(rm(log,new_planes))
         }
       }
       new_planes <- anti_join(planes,existing_planes,by="hex")
+      new_planes <- new_planes[!is.na(new_planes$hex),]
       {
         if (nrow(new_planes)>0) {
           new_planes$SeenTimes <- 1
+          new_planes <- new_planes %>%
+            mutate(dist_km = distGeo(
+              p1 = cbind(lon, lat),
+              p2 = cbind(Sys.getenv("lon"),Sys.getenv("lat"))) / 1000
+            ) 
+          new_planes$dist_km <- round(new_planes$dist_km, digits = 3)
           new_planes$FirstSeen <- Sys.time()
           new_planes$LastSeen <- Sys.time()
-          new_planes <- subset(new_planes, select=c(hex,flight,alt_baro,baro_rate,gs,nav_heading,version,messages,seen,category,lon,lat,squawk,emergency,SeenTimes,FirstSeen,LastSeen))
+          new_planes <- subset(new_planes, select=c(hex,flight,alt_baro,baro_rate,nav_heading,gs,dist_km,messages,seen,category,squawk,emergency,lon,lat,version,SeenTimes,FirstSeen,LastSeen))
           new_planes$trigger_timestamp <- Sys.time()
           new_planes <- new_planes[!is.na(new_planes$hex),]
           pg <- dbConnect(RPostgres::Postgres()
@@ -139,16 +164,8 @@ while (1==1) {
                           , password=Sys.getenv("pg_password"))
           dbWriteTable(pg,"planes",new_planes, row.names = FALSE, overwrite = FALSE, append = TRUE)
           end_time <- Sys.time()
-          log <- data.frame(
-            Source = "planes",
-            rows_added = nrow(new_planes),
-            StartTime = start_time,
-            EndTime = end_time,
-            trigger_timestamp = Sys.time())
-          dbWriteTable(pg,"log",log, row.names = FALSE, overwrite = FALSE, append = TRUE)
           dbDisconnect(pg)
           closeAllConnections()
-          suppressWarnings(rm(log))
         }
       }
       invisible(gc())
